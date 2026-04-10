@@ -1,34 +1,44 @@
 "use client";
 
-import { useState, useEffect, useCallback, use } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../lib/supabase";
 import InventoryTable from "../components/InventoryTable";
 import AddItemForm from "../components/AddItemForm";
-import { CATEGORIES } from "../lib/constants";
+
+const CATEGORIES = [
+  "Grains",
+  "Canned Goods",
+  "Produce",
+  "Dairy",
+  "Protein",
+  "Snacks",
+  "Beverages",
+  "Other",
+];
 
 export default function InventoryPage() {
-    const [items, setItems] = useState([]);
-    const [programs, setPrograms] = useState("name");
-    const [loading, setLoading] = useState("asc");
-    const [error, setError] = useState([]);
+  const [items, setItems] = useState([]);
+  const [programs, setPrograms] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-    const [showAddForm, setShowAddForm] = useState(false);
-    const [showLowStock, setShowRestockModal] = useState(false);
-    const [restockItem, setRestockItem] = useState(null);
-    const [restockQty, setRestockQty] = useState("");
-    const [restockNotes, setRestockNotes] = useState("");
-    const [restockLoading, setRestockLoading] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [showRestockModal, setShowRestockModal] = useState(false);
+  const [restockItem, setRestockItem] = useState(null);
+  const [restockQty, setRestockQty] = useState("");
+  const [restockNotes, setRestockNotes] = useState("");
+  const [restockLoading, setRestockLoading] = useState(false);
 
-    const [search, setSearch] = useState("");
-    const [filterCategory, setFilterCategory] = useState("");
-    const [filterProgram, setFilterProgram] = useState("");
-    const [filterLowStock, setFilterLowStock] = useState(false);
-    const [sortField, setSortField] = useState("name");
-    const [sortDir, setSortDir] = useState("asc");
+  const [search, setSearch] = useState("");
+  const [filterCategory, setFilterCategory] = useState("");
+  const [filterProgram, setFilterProgram] = useState("");
+  const [filterLowStock, setFilterLowStock] = useState(false);
+  const [sortField, setSortField] = useState("name");
+  const [sortDir, setSortDir] = useState("asc");
 
-    const [showCheckpointModal, setShowCheckpointModal] = useState(false);
-    const [checkpointNotes, setCheckpointNotes] = useState("");
-    const [checkpointLoading, setCheckpointLoading] = useState(false);
+  const [showCheckpointModal, setShowCheckpointModal] = useState(false);
+  const [checkpointNotes, setCheckpointNotes] = useState("");
+  const [checkpointLoading, setCheckpointLoading] = useState(false);
 
     // Fetch items from database with filters and sorting
      useEffect(() => {
