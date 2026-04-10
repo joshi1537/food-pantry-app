@@ -5,13 +5,6 @@
   --foreground: #171717;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
 @media (prefers-color-scheme: dark) {
   :root {
     --background: #0a0a0a;
@@ -19,8 +12,99 @@
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Layout */
+
+.main-content {
+  max-width: 65rem;
+  margin: 0 auto;
+  padding: 2.5rem 1rem;
 }
+
+/* Navbar */
+
+.navbar {
+  background: #861F41;
+  border-bottom: 2px solid;
+  padding: 2rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.navbar-brand {
+  font-weight: 700;
+  font-family: 'Rubik', Arial, sans-serif;
+  color: white;
+}
+
+.navbar-links {
+  display: flex;
+  gap: 1.5rem;
+}
+
+.nav-link {
+  color: white;
+  font-family: 'Rubik', Arial, sans-serif;
+  font-size: 1rem;
+}
+
+.nav-link:hover {
+  font-weight: 700;
+}
+
+.nav-link-active {
+  color: orange;
+  font-weight: 750;
+  font-size: 1rem;
+}
+
+
+/* Page */
+
+.pageBody {
+  padding: 3rem 0;
+}
+
+.pageTitle {
+  font-size: 2rem;
+  font-weight: 800;
+  font-family: 'Rubik', Arial, sans-serif;
+  color: #111827;
+  margin-bottom: 0.5rem;
+}
+
+.page-subtitle {
+  color: #5e636d;
+  margin-bottom: 2.5rem;
+}
+
+
+/* Cards */
+
+.card {
+  display: block;
+  padding: 2.5rem;
+  background: white;
+  border-radius: 0;
+  border: 1px solid #d7d6dc;
+  font-family: 'Rubik', Arial, sans-serif;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.card:hover {
+  border-color: maroon;
+}
+
+.cardTitle {
+  font-weight: 600;
+  color: #111827;
+}
+
+.cardWriting {
+  font-size: 1rem;
+  color: #6b7280;
+  margin-top: 0.25rem;
+}
+
+ 
