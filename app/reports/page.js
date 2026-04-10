@@ -7,47 +7,103 @@ export default function ReportsPage() {
   const [items, setItems] = useState([]);
   const [auditLog, setAuditLog] = useState([]);
   const [programs, setPrograms] = useState([]);
+  const [checkpoints, setCheckpoints] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [rollingOver, setRollingOver] = useState(false);
+  const [expandedCheckpoint, setExpandedCheckpoint] = useState(null);
 
-   useEffect(() => {
+  useEffect(() => {
     const fetchAll = async () => {
-      const [{ data: iData }, { data: aData }, { data: pData }] = await Promise.all([
+      const [{ data: iData }, { data: aData }, { data: pData }, { data: cData }] = await Promise.all([
         supabase.from("items").select("*, programs(name)"),
         supabase.from("audit_log").select("*").order("created_at", { ascending: false }).limit(20),
         supabase.from("programs").select("*"),
+        supabase.from("checkpoints").select("*").order("created_at", { ascending: false }).limit(10),
       ]);
       setItems(iData || []);
       setAuditLog(aData || []);
       setPrograms(pData || []);
+      setCheckpoints(cData || []);
       setLoading(false);
     };
     fetchAll();
   }, []);
 
-  //computed stats
-    const totalItems = items.length;
+  // Stats
+  const totalItems = items.length;
   const totalUnits = items.reduce((s, i) => s + (i.quantity || 0), 0);
   const totalWeight = items.reduce((s, i) => s + (i.weight || 0) * (i.quantity || 0), 0);
   const lowStock = items.filter((i) => i.quantity <= (i.low_stock_threshold ?? 5));
 
-  // By category
   const byCategory = items.reduce((acc, item) => {
     const cat = item.category || "Other";
     acc[cat] = (acc[cat] || 0) + (item.quantity || 0);
     return acc;
   }, {});
 
-  // By program
-    const byProgram = items.reduce((acc, item) => {
+  const byProgram = items.reduce((acc, item) => {
     const prog = item.programs?.name || "Unassigned";
     acc[prog] = (acc[prog] || 0) + (item.quantity || 0);
     return acc;
   }, {});
 
   const maxCatVal = Math.max(...Object.values(byCategory), 1);
-    const maxProgVal = Math.max(...Object.values(byProgram), 1);
+  const maxProgVal = Math.max(...Object.values(byProgram), 1);
 
-   if (loading) return (
+  const exportCSV = () => {
+    const headers = ["Name", "Category", "Program", "Quantity", "Unit", "Weight (lbs)", "$/Unit", "$/lb"];
+    const rows = items.map((i) => [
+      i.name, i.category || "", i.programs?.name || "",
+      i.quantity, i.unit || "", i.weight ?? "",
+      i.price_per_unit ?? "", i.price_per_weight ?? "",
+    ]);
+    const csv = [headers, ...rows]
+      .map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `vt-pantry-report-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleYearRollover = async () => {
+    if (!confirm("End-of-Year Rollover: This will save a checkpoint of all current stock, then reset all quantities to 0. This cannot be undone. Continue?")) return;
+    setRollingOver(true);
+    try {
+      // 1. Save checkpoint
+      const snapshot = items.map((i) => ({
+        item_id: i.id, item_name: i.name,
+        quantity: i.quantity, category: i.category, program_id: i.program_id,
+      }));
+      const { error: cpErr } = await supabase.from("checkpoints").insert({
+        notes: `End-of-Year Rollover — ${new Date().getFullYear()}`,
+        snapshot,
+      });
+      if (cpErr) throw cpErr;
+
+      // 2. Reset all quantities to 0
+      const { error: resetErr } = await supabase.from("items").update({ quantity: 0 }).gte("quantity", 0);
+      if (resetErr) throw resetErr;
+
+      // 3. Audit log
+      await supabase.from("audit_log").insert({
+        action: "rollover",
+        details: { year: new Date().getFullYear(), items_count: items.length },
+      });
+
+      alert("✅ Year rollover complete! A checkpoint was saved and all quantities reset to 0.");
+      window.location.reload();
+    } catch (err) {
+      alert("Error during rollover: " + err.message);
+    } finally {
+      setRollingOver(false);
+    }
+  };
+
+  if (loading) return (
     <div className="page">
       <div className="loading-state"><div className="spinner" /><p>Loading reports…</p></div>
       <style jsx>{`.page{min-height:100vh;background:#f7f8fa;font-family:"DM Sans",sans-serif;}.loading-state{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px 20px;gap:16px;color:#6b7280;}.spinner{width:36px;height:36px;border:3px solid #e5e7eb;border-top-color:#861f41;border-radius:50%;animation:spin 0.8s linear infinite;}@keyframes spin{to{transform:rotate(360deg);}}`}</style>
@@ -61,9 +117,14 @@ export default function ReportsPage() {
           <h1>Reports</h1>
           <p className="subtitle">VT Food Pantry · Inventory Summary</p>
         </div>
+        <div className="header-actions">
+          <button className="btn btn-secondary" onClick={exportCSV}>⬇ Export CSV</button>
+          <button className="btn btn-danger" onClick={handleYearRollover} disabled={rollingOver}>
+            {rollingOver ? "Processing…" : "📅 Year Rollover"}
+          </button>
+        </div>
       </header>
 
-      {/* Summary stats */}
       <div className="stats-bar">
         <div className="stat"><span className="stat-value">{totalItems}</span><span className="stat-label">Item Types</span></div>
         <div className="stat"><span className="stat-value">{totalUnits.toLocaleString()}</span><span className="stat-label">Total Units</span></div>
@@ -72,46 +133,43 @@ export default function ReportsPage() {
       </div>
 
       <div className="content">
-        {/* By category chart */}
+        {/* Charts */}
         <div className="card">
           <h2>Units by Category</h2>
-          <div className="bar-chart">
-            {Object.entries(byCategory).sort((a, b) => b[1] - a[1]).map(([cat, qty]) => (
-              <div key={cat} className="bar-row">
-                <span className="bar-label">{cat}</span>
-                <div className="bar-track">
-                  <div className="bar-fill" style={{ width: `${(qty / maxCatVal) * 100}%` }} />
+          {Object.keys(byCategory).length === 0 ? <p className="empty-note">No data yet.</p> : (
+            <div className="bar-chart">
+              {Object.entries(byCategory).sort((a, b) => b[1] - a[1]).map(([cat, qty]) => (
+                <div key={cat} className="bar-row">
+                  <span className="bar-label">{cat}</span>
+                  <div className="bar-track"><div className="bar-fill" style={{ width: `${(qty / maxCatVal) * 100}%` }} /></div>
+                  <span className="bar-value">{qty}</span>
                 </div>
-                <span className="bar-value">{qty}</span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* By program chart */}
         <div className="card">
           <h2>Units by Program</h2>
-          <div className="bar-chart">
-            {Object.entries(byProgram).map(([prog, qty]) => (
-              <div key={prog} className="bar-row">
-                <span className="bar-label">{prog}</span>
-                <div className="bar-track">
-                  <div className="bar-fill bar-fill-alt" style={{ width: `${(qty / maxProgVal) * 100}%` }} />
+          {Object.keys(byProgram).length === 0 ? <p className="empty-note">No data yet.</p> : (
+            <div className="bar-chart">
+              {Object.entries(byProgram).map(([prog, qty]) => (
+                <div key={prog} className="bar-row">
+                  <span className="bar-label">{prog}</span>
+                  <div className="bar-track"><div className="bar-fill bar-fill-alt" style={{ width: `${(qty / maxProgVal) * 100}%` }} /></div>
+                  <span className="bar-value">{qty}</span>
                 </div>
-                <span className="bar-value">{qty}</span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Low stock list */}
+        {/* Low stock */}
         {lowStock.length > 0 && (
           <div className="card card-full">
-            <h2> Low Stock Items</h2>
+            <h2>⚠️ Low Stock Items</h2>
             <table className="simple-table">
-              <thead>
-                <tr><th>Item</th><th>Category</th><th>Program</th><th>Current Qty</th><th>Threshold</th></tr>
-              </thead>
+              <thead><tr><th>Item</th><th>Category</th><th>Program</th><th>Current Qty</th><th>Threshold</th></tr></thead>
               <tbody>
                 {lowStock.map((i) => (
                   <tr key={i.id}>
@@ -127,16 +185,51 @@ export default function ReportsPage() {
           </div>
         )}
 
-        {/* Recent audit log */}
+        {/* Checkpoint history */}
+        <div className="card card-full">
+          <h2>📸 Checkpoint History</h2>
+          {checkpoints.length === 0 ? (
+            <p className="empty-note">No checkpoints saved yet. Use "Save Checkpoint" on the Inventory page to create a baseline snapshot.</p>
+          ) : (
+            <div className="checkpoint-list">
+              {checkpoints.map((cp) => (
+                <div key={cp.id} className="checkpoint-row">
+                  <div className="checkpoint-meta">
+                    <span className="checkpoint-date">{new Date(cp.created_at).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}</span>
+                    <span className="checkpoint-note">{cp.notes || "No notes"}</span>
+                    <span className="checkpoint-count">{cp.snapshot?.length ?? 0} items</span>
+                  </div>
+                  <button className="btn-sm" onClick={() => setExpandedCheckpoint(expandedCheckpoint === cp.id ? null : cp.id)}>
+                    {expandedCheckpoint === cp.id ? "▲ Hide" : "▼ View"}
+                  </button>
+                  {expandedCheckpoint === cp.id && cp.snapshot && (
+                    <div className="checkpoint-detail">
+                      <table className="simple-table">
+                        <thead><tr><th>Item</th><th>Category</th><th>Qty at Snapshot</th></tr></thead>
+                        <tbody>
+                          {cp.snapshot.map((s, idx) => (
+                            <tr key={idx}>
+                              <td className="td-name">{s.item_name}</td>
+                              <td>{s.category || "—"}</td>
+                              <td>{s.quantity}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Recent activity */}
         <div className="card card-full">
           <h2>Recent Activity</h2>
-          {auditLog.length === 0 ? (
-            <p className="empty-note">No activity logged yet.</p>
-          ) : (
+          {auditLog.length === 0 ? <p className="empty-note">No activity logged yet.</p> : (
             <table className="simple-table">
-              <thead>
-                <tr><th>Date</th><th>Action</th><th>Details</th></tr>
-              </thead>
+              <thead><tr><th>Date</th><th>Action</th><th>Details</th></tr></thead>
               <tbody>
                 {auditLog.map((log) => (
                   <tr key={log.id}>
@@ -146,6 +239,7 @@ export default function ReportsPage() {
                       {log.details?.item_name && <strong>{log.details.item_name}</strong>}
                       {log.details?.quantity_added != null && ` +${log.details.quantity_added}`}
                       {log.details?.notes && ` — ${log.details.notes}`}
+                      {log.action === "rollover" && ` Year ${log.details?.year} — ${log.details?.items_count} items archived`}
                     </td>
                   </tr>
                 ))}
@@ -157,9 +251,18 @@ export default function ReportsPage() {
 
       <style jsx>{`
         .page { min-height: 100vh; background: #f7f8fa; font-family: "DM Sans", sans-serif; padding: 0 0 60px; }
-        .page-header { display: flex; align-items: center; justify-content: space-between; padding: 28px 36px 20px; background: #fff; border-bottom: 2px solid #e8eaed; }
+        .page-header { display: flex; align-items: center; justify-content: space-between; padding: 28px 36px 20px; background: #fff; border-bottom: 2px solid #e8eaed; flex-wrap: wrap; gap: 12px; }
         .page-header h1 { font-size: 1.75rem; font-weight: 700; color: #1a1a2e; margin: 0; }
         .subtitle { margin: 2px 0 0; font-size: 0.85rem; color: #6b7280; }
+        .header-actions { display: flex; gap: 10px; }
+        .btn { padding: 9px 18px; border-radius: 8px; font-size: 0.875rem; font-weight: 600; cursor: pointer; border: none; font-family: "DM Sans", sans-serif; transition: all 0.15s; }
+        .btn-secondary { background: #fff; color: #374151; border: 1.5px solid #d1d5db; }
+        .btn-secondary:hover { background: #f3f4f6; }
+        .btn-danger { background: #fff; color: #b91c1c; border: 1.5px solid #fca5a5; }
+        .btn-danger:hover:not(:disabled) { background: #fef2f2; }
+        .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+        .btn-sm { padding: 4px 12px; border-radius: 6px; font-size: 0.78rem; font-weight: 600; cursor: pointer; border: 1.5px solid #d1d5db; background: #fff; color: #374151; white-space: nowrap; }
+        .btn-sm:hover { background: #f3f4f6; }
         .stats-bar { display: flex; background: #fff; border-bottom: 2px solid #e8eaed; }
         .stat { flex: 1; padding: 16px 24px; border-right: 1px solid #e8eaed; display: flex; flex-direction: column; align-items: center; }
         .stat:last-child { border-right: none; }
@@ -190,13 +293,17 @@ export default function ReportsPage() {
         .action-transfer { background: #eff6ff; color: #2563eb; }
         .action-edit { background: #fefce8; color: #d97706; }
         .action-delete { background: #fef2f2; color: #dc2626; }
-        .empty-note { font-size: 0.875rem; color: #9ca3af; }
-        .loading-state { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 80px 20px; gap: 16px; color: #6b7280; }
-        .spinner { width: 36px; height: 36px; border: 3px solid #e5e7eb; border-top-color: #861f41; border-radius: 50%; animation: spin 0.8s linear infinite; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        @media (max-width: 640px) { .content { grid-template-columns: 1fr; } }
+        .action-rollover { background: #f5f3ff; color: #7c3aed; }
+        .empty-note { font-size: 0.875rem; color: #9ca3af; line-height: 1.5; }
+        .checkpoint-list { display: flex; flex-direction: column; gap: 12px; }
+        .checkpoint-row { border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+        .checkpoint-meta { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+        .checkpoint-date { font-weight: 700; font-size: 0.875rem; color: #1a1a2e; }
+        .checkpoint-note { font-size: 0.85rem; color: #6b7280; font-style: italic; flex: 1; }
+        .checkpoint-count { font-size: 0.78rem; background: #f3f4f6; color: #374151; padding: 2px 10px; border-radius: 999px; font-weight: 600; }
+        .checkpoint-detail { margin-top: 4px; border-top: 1px solid #f0f0f0; padding-top: 12px; }
+        @media (max-width: 640px) { .content { grid-template-columns: 1fr; } .page-header { padding: 20px; } }
       `}</style>
     </div>
   );
 }
-
