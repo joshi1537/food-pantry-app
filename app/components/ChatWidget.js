@@ -17,10 +17,12 @@ export default function ChatWidget() {
   }, [messages]);
 
   const fetchInventoryContext = async () => {
-    const [{ data: items }, { data: vendors }, { data: programs }] = await Promise.all([
-      supabase.from('items').select('name, quantity, category, low_stock_threshold, price_per_unit, price_per_weight, weight').order('name'),
+    const [{ data: items }, { data: vendors }, { data: programs }, { data: transactions }, { data: checkpoints }] = await Promise.all([
+      supabase.from('items').select('name, quantity, category, low_stock_threshold').order('name'),
       supabase.from('vendors').select('name, contact'),
       supabase.from('programs').select('name'),
+      supabase.from('transactions').select('item_id, type, quantity, created_at').order('created_at', { ascending: false }).limit(20),
+      supabase.from('checkpoints').select('name, created_at').order('created_at', { ascending: false }).limit(5),
     ]);
 
     const lowStock = (items || []).filter(i => i.quantity <= (i.low_stock_threshold ?? 5));
@@ -28,21 +30,30 @@ export default function ChatWidget() {
     return `
 You are a helpful assistant for the VT Food Pantry inventory system. Here is the current live data:
 
-PROGRAMS: ${(programs || []).map(p => p.name).join(', ')}
+PROGRAMS: ${(programs || []).map(p => p.name).join(', ') || 'None'}
 
-VENDORS: ${(vendors || []).map(v => `${v.name}${v.contact ? ` (${v.contact})` : ''}`).join(', ')}
+VENDORS: ${(vendors || []).map(v => `${v.name}${v.contact ? ` (${v.contact})` : ''}`).join(', ') || 'None'}
 
-INVENTORY (${(items || []).length} items):
+INVENTORY (${(items || []).length} items total):
 ${(items || []).map(i => `- ${i.name}: ${i.quantity} units, category: ${i.category || 'uncategorized'}`).join('\n')}
 
-LOW STOCK ITEMS (quantity at or below threshold):
-${lowStock.length === 0 ? 'None' : lowStock.map(i => `- ${i.name}: only ${i.quantity} left`).join('\n')}
+LOW STOCK ITEMS (at or below threshold):
+${lowStock.length === 0 ? 'None' : lowStock.map(i => `- ${i.name}: only ${i.quantity} left (threshold: ${i.low_stock_threshold ?? 5})`).join('\n')}
+
+RECENT TRANSACTIONS (last 20):
+${(transactions || []).map(t => `- ${t.type} ${t.quantity} units (item_id: ${t.item_id}) on ${new Date(t.created_at).toLocaleDateString()}`).join('\n') || 'None'}
+
+RECENT CHECKPOINTS:
+${(checkpoints || []).map(c => `- ${c.name} on ${new Date(c.created_at).toLocaleDateString()}`).join('\n') || 'None'}
 
 You can answer questions about:
-- Current inventory levels and low stock
-- Vendors and programs
-- How to use the app (adding items, transfers, checkpoints, year rollover, export CSV)
+- Current inventory levels and which items are low on stock
+- Vendors and how to contact them
+- Programs the pantry serves
+- Recent transactions and activity
+- How to use the app (adding items, transfers, checkpoints, export CSV)
 - Food storage tips and categorization advice
+
 Keep answers concise and friendly. You are embedded in the VT Food Pantry app used by volunteers.
     `.trim();
   };
@@ -56,29 +67,26 @@ Keep answers concise and friendly. You are embedded in the VT Food Pantry app us
 
     try {
       const context = await fetchInventoryContext();
-      const history = messages.map(m => ({
+
+      // Build history in Gemini format (exclude the initial greeting)
+      const history = messages.slice(1).map(m => ({
         role: m.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: m.text }]
+        parts: [{ text: m.text }],
       }));
 
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.NEXT_PUBLIC_GEMINI_API_KEY}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            system_instruction: { parts: [{ text: context }] },
-            contents: [
-              ...history,
-              { role: 'user', parts: [{ text: userMsg }] }
-            ],
-          }),
-        }
-      );
+      const response = await fetch('/api/gemini', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ context, history, message: userMsg }),
+      });
 
       const data = await response.json();
-      const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || "Sorry, I couldn't get a response. Try again!";
-      setMessages(prev => [...prev, { role: 'assistant', text: reply }]);
+
+      if (data.error) {
+        setMessages(prev => [...prev, { role: 'assistant', text: `Error: ${data.error}` }]);
+      } else {
+        setMessages(prev => [...prev, { role: 'assistant', text: data.text }]);
+      }
     } catch (err) {
       setMessages(prev => [...prev, { role: 'assistant', text: "Something went wrong. Please try again!" }]);
     } finally {
