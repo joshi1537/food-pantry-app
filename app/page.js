@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 'use client'
 
 async function askGemini(prompt) 
@@ -12,13 +11,11 @@ async function askGemini(prompt)
   const data = await res.json()
   return data.text
 }
-export default function HomePage() 
-{
-=======
+
 import HomeCalendar from './components/HomeCalendar'
 
-export default function HomePage() {
->>>>>>> e0603154c83a5e8c64429c036ac3159f2dfdf248
+export default function HomePage() 
+{
   return (
     <div className="pageBody">
       <h1 className="pageTitle">Virginia Tech Food Pantry</h1>
