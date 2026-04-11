@@ -15,7 +15,7 @@ export default function TransfersPage() {
     const [{ data: tData }, { data: pData }] = await Promise.all([
       supabase
         .from("transactions")
-        .select("*, items(name, unit), from_program:programs!transactions_from_program_fkey(name), to_program:programs!transactions_to_program_fkey(name)")
+        .select("*, items(name), from_program:programs!transactions_from_program_fkey(name), to_program:programs!transactions_to_program_fkey(name)")
         .eq("type", "transfer")
         .order("created_at", { ascending: false })
         .limit(100),
@@ -45,10 +45,10 @@ export default function TransfersPage() {
       ) : (
         <div className="table-wrap">
           {transfers.length === 0 ? (
-          <div className="empty-state">
-            <p style={{ fontSize: "2rem" }}>↔️</p>
-             <p>No transfers yet.</p>
-              </div>
+            <div className="empty-state">
+              <p style={{ fontSize: "2rem" }}>↔️</p>
+              <p>No transfers yet.</p>
+            </div>
           ) : (
             <table className="t-table">
               <thead>
@@ -66,7 +66,7 @@ export default function TransfersPage() {
                   <tr key={t.id}>
                     <td className="td-date">{new Date(t.created_at).toLocaleDateString()}</td>
                     <td className="td-name">{t.items?.name ?? "—"}</td>
-                    <td><span className="qty-badge">{t.quantity} {t.items?.unit ?? ""}</span></td>
+                    <td><span className="qty-badge">{t.quantity}</span></td>
                     <td>{t.from_program?.name ?? "—"}</td>
                     <td>{t.to_program?.name ?? "—"}</td>
                     <td className="td-note">{t.note ?? "—"}</td>
@@ -85,7 +85,6 @@ export default function TransfersPage() {
               <h2>New Transfer</h2>
               <button className="modal-close" onClick={() => setShowForm(false)}>✕</button>
             </div>
-            {/* Fixed: was incorrectly calling fetchData() */}
             <TransferForm
               programs={programs}
               onSuccess={() => { setShowForm(false); fetchTransfers(); }}

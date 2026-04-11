@@ -25,7 +25,6 @@ export default function InventoryTable({ items, sortField, sortDir, onSort, onRe
       category: item.category ?? "",
       program_id: item.program_id ?? "",
       quantity: item.quantity ?? "",
-      unit: item.unit ?? "",
       weight: item.weight ?? "",
       price_per_unit: item.price_per_unit ?? "",
       price_per_weight: item.price_per_weight ?? "",
@@ -43,7 +42,6 @@ export default function InventoryTable({ items, sortField, sortDir, onSort, onRe
           category: editData.category || null,
           program_id: editData.program_id || null,
           quantity: Number(editData.quantity),
-          unit: editData.unit || null,
           weight: editData.weight !== "" ? Number(editData.weight) : null,
           price_per_unit: editData.price_per_unit !== "" ? Number(editData.price_per_unit) : null,
           price_per_weight: editData.price_per_weight !== "" ? Number(editData.price_per_weight) : null,
@@ -55,7 +53,6 @@ export default function InventoryTable({ items, sortField, sortDir, onSort, onRe
 
       await supabase.from("audit_log").insert({
         action: "edit",
-        item_id: editingItem.id,
         details: { item_id: editingItem.id, item_name: editingItem.name, changes: editData },
       });
 
@@ -76,7 +73,6 @@ export default function InventoryTable({ items, sortField, sortDir, onSort, onRe
       if (error) throw error;
       await supabase.from("audit_log").insert({
         action: "delete",
-        item_id: item.id,
         details: { item_id: item.id, item_name: item.name },
       });
       onRefresh();
@@ -99,7 +95,6 @@ export default function InventoryTable({ items, sortField, sortDir, onSort, onRe
               <th onClick={() => onSort("category")} className="sortable">Category{arrow("category")}</th>
               <th>Program</th>
               <th onClick={() => onSort("quantity")} className="sortable">Qty{arrow("quantity")}</th>
-              <th>Unit</th>
               <th>Weight (lbs)</th>
               <th>$/Unit</th>
               <th>$/lb</th>
@@ -117,7 +112,6 @@ export default function InventoryTable({ items, sortField, sortDir, onSort, onRe
                   <td><span className="badge">{item.category ?? "—"}</span></td>
                   <td>{item.programs?.name ?? "—"}</td>
                   <td className={isLow ? "qty-low" : "qty"}>{item.quantity}</td>
-                  <td>{item.unit ?? "—"}</td>
                   <td>{item.weight ?? "—"}</td>
                   <td>{item.price_per_unit != null ? `$${item.price_per_unit}` : "—"}</td>
                   <td>{item.price_per_weight != null ? `$${item.price_per_weight}` : "—"}</td>
@@ -135,7 +129,6 @@ export default function InventoryTable({ items, sortField, sortDir, onSort, onRe
         </table>
       </div>
 
-      {/* Edit Modal */}
       {editingItem && (
         <div className="modal-overlay" onClick={() => setEditingItem(null)}>
           <div className="modal-box" onClick={(e) => e.stopPropagation()}>
@@ -163,12 +156,12 @@ export default function InventoryTable({ items, sortField, sortDir, onSort, onRe
                   <input name="quantity" type="number" min="0" value={editData.quantity} onChange={set} />
                 </div>
                 <div className="field">
-                  <label>Unit</label>
-                  <input name="unit" placeholder="e.g. cans" value={editData.unit} onChange={set} />
-                </div>
-                <div className="field">
                   <label>Weight per unit (lbs)</label>
                   <input name="weight" type="number" min="0" step="any" value={editData.weight} onChange={set} />
+                </div>
+                <div className="field">
+                  <label>Low stock alert at</label>
+                  <input name="low_stock_threshold" type="number" min="0" value={editData.low_stock_threshold} onChange={set} />
                 </div>
               </div>
               <div className="form-row">
@@ -179,10 +172,6 @@ export default function InventoryTable({ items, sortField, sortDir, onSort, onRe
                 <div className="field">
                   <label>Price per lb ($)</label>
                   <input name="price_per_weight" type="number" min="0" step="any" value={editData.price_per_weight} onChange={set} />
-                </div>
-                <div className="field">
-                  <label>Low stock alert at</label>
-                  <input name="low_stock_threshold" type="number" min="0" value={editData.low_stock_threshold} onChange={set} />
                 </div>
               </div>
               <div className="form-row">
@@ -228,8 +217,6 @@ export default function InventoryTable({ items, sortField, sortDir, onSort, onRe
         .btn-delete { background: #fef2f2; color: #dc2626; }
         .btn-delete:hover { background: #fee2e2; }
         .btn-action:disabled { opacity: 0.5; cursor: not-allowed; }
-
-        /* Edit Modal */
         .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 200; padding: 20px; }
         .modal-box { background: #fff; border-radius: 14px; width: 100%; max-width: 640px; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.25); }
         .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 20px 24px 0; }

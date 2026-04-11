@@ -73,9 +73,13 @@ export default function ReportsPage() {
     setShowRolloverModal(false);
     setRollingOver(true);
     try {
+      // 1. Save checkpoint snapshot of current stock
       const snapshot = items.map((i) => ({
-        item_id: i.id, item_name: i.name,
-        quantity: i.quantity, category: i.category, program_id: i.program_id,
+        item_id: i.id,
+        item_name: i.name,
+        quantity: i.quantity,
+        category: i.category,
+        program_id: i.program_id,
       }));
       const { error: cpErr } = await supabase.from("checkpoints").insert({
         notes: `End-of-Year Rollover — ${new Date().getFullYear()}`,
@@ -83,14 +87,17 @@ export default function ReportsPage() {
       });
       if (cpErr) throw cpErr;
 
-      const { error: resetErr } = await supabase.from("items").update({ quantity: 0 }).gte("quantity", 0);
-      if (resetErr) throw resetErr;
-
+      // 2. Carry remaining stock forward — quantities stay as-is
       await supabase.from("audit_log").insert({
         action: "rollover",
-        details: { year: new Date().getFullYear(), items_count: items.length },
+        details: {
+          year: new Date().getFullYear(),
+          items_count: items.length,
+          total_units_carried_forward: items.reduce((s, i) => s + (i.quantity || 0), 0),
+        },
       });
 
+      alert(`✅ Year rollover complete! A checkpoint was saved with all current stock. ${items.reduce((s, i) => s + (i.quantity || 0), 0)} total units carried forward into the new year.`);
       window.location.reload();
     } catch (err) {
       alert("Error during rollover: " + err.message);
@@ -182,7 +189,7 @@ export default function ReportsPage() {
         <div className="card card-full">
           <h2>📸 Checkpoint History</h2>
           {checkpoints.length === 0 ? (
-            <p className="empty-note">No checkpoints saved yet.</p>
+            <p className="empty-note">No checkpoints saved yet. Use "Save Checkpoint" on the Inventory page to create a baseline snapshot.</p>
           ) : (
             <div className="checkpoint-list">
               {checkpoints.map((cp) => (
@@ -231,7 +238,7 @@ export default function ReportsPage() {
                       {log.details?.item_name && <strong>{log.details.item_name}</strong>}
                       {log.details?.quantity_added != null && ` +${log.details.quantity_added}`}
                       {log.details?.notes && ` — ${log.details.notes}`}
-                      {log.action === "rollover" && ` Year ${log.details?.year} — ${log.details?.items_count} items archived`}
+                      {log.action === "rollover" && ` Year ${log.details?.year} — ${log.details?.items_count} items, ${log.details?.total_units_carried_forward} units carried forward`}
                     </td>
                   </tr>
                 ))}
@@ -241,7 +248,6 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {/* Year Rollover Confirmation Modal */}
       {showRolloverModal && (
         <div className="modal-overlay" onClick={() => setShowRolloverModal(false)}>
           <div className="modal-box" onClick={(e) => e.stopPropagation()}>
@@ -250,14 +256,15 @@ export default function ReportsPage() {
               <button className="modal-close" onClick={() => setShowRolloverModal(false)}>✕</button>
             </div>
             <div className="modal-body">
-              <div className="warning-icon">⚠️</div>
-              <p className="warning-title">This cannot be undone.</p>
+              <div className="warning-icon">📦</div>
+              <p className="warning-title">Ready to roll over to a new year?</p>
               <p className="warning-desc">This will:</p>
               <ul className="warning-list">
                 <li>✅ Save a checkpoint snapshot of all current stock</li>
-                <li>🔄 Reset all item quantities to 0</li>
+                <li>➡️ Carry all remaining quantities forward into the new year</li>
+                <li>📋 Log the rollover in activity history</li>
               </ul>
-              <p className="warning-desc">Use this at the end of the academic year to start fresh while keeping a record of this year's inventory.</p>
+              <p className="warning-desc">Current stock: <strong>{totalUnits} total units across {totalItems} item types</strong> will be carried forward.</p>
               <div className="modal-actions">
                 <button className="btn btn-secondary" onClick={() => setShowRolloverModal(false)}>Cancel</button>
                 <button className="btn btn-danger" onClick={handleYearRollover}>Yes, Run Rollover</button>
@@ -276,8 +283,8 @@ export default function ReportsPage() {
         .btn { padding: 9px 18px; border-radius: 8px; font-size: 0.875rem; font-weight: 600; cursor: pointer; border: none; font-family: "DM Sans", sans-serif; transition: all 0.15s; }
         .btn-secondary { background: #fff; color: #374151; border: 1.5px solid #d1d5db; }
         .btn-secondary:hover { background: #f3f4f6; }
-        .btn-danger { background: #b91c1c; color: #fff; border: none; }
-        .btn-danger:hover:not(:disabled) { background: #991b1b; }
+        .btn-danger { background: #861f41; color: #fff; border: none; }
+        .btn-danger:hover:not(:disabled) { background: #6e1835; }
         .btn:disabled { opacity: 0.55; cursor: not-allowed; }
         .btn-sm { padding: 4px 12px; border-radius: 6px; font-size: 0.78rem; font-weight: 600; cursor: pointer; border: 1.5px solid #d1d5db; background: #fff; color: #374151; white-space: nowrap; }
         .btn-sm:hover { background: #f3f4f6; }
@@ -296,7 +303,7 @@ export default function ReportsPage() {
         .bar-label { font-size: 0.78rem; color: #4b5563; width: 140px; flex-shrink: 0; }
         .bar-track { flex: 1; height: 10px; background: #f3f4f6; border-radius: 999px; overflow: hidden; }
         .bar-fill { height: 100%; background: #861f41; border-radius: 999px; transition: width 0.4s; }
-        .bar-fill-alt { background: #2563eb; }
+        .bar-fill-alt { background: #e87722; }
         .bar-value { font-size: 0.78rem; font-weight: 700; color: #1a1a2e; width: 32px; text-align: right; }
         .simple-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
         .simple-table th { padding: 8px 12px; text-align: left; font-size: 0.72rem; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 2px solid #e5e7eb; }
@@ -328,7 +335,7 @@ export default function ReportsPage() {
         .modal-close:hover { background: #f3f4f6; }
         .modal-body { padding: 20px 24px 24px; display: flex; flex-direction: column; gap: 12px; }
         .warning-icon { font-size: 2rem; text-align: center; }
-        .warning-title { font-size: 1rem; font-weight: 700; color: #b91c1c; text-align: center; margin: 0; }
+        .warning-title { font-size: 1rem; font-weight: 700; color: #1a1a2e; text-align: center; margin: 0; }
         .warning-desc { font-size: 0.875rem; color: #4b5563; margin: 0; }
         .warning-list { margin: 0; padding-left: 4px; list-style: none; display: flex; flex-direction: column; gap: 6px; }
         .warning-list li { font-size: 0.875rem; color: #374151; background: #f9fafb; padding: 8px 12px; border-radius: 8px; }
