@@ -6,14 +6,8 @@ import InventoryTable from "../components/InventoryTable";
 import AddItemForm from "../components/AddItemForm";
 
 const CATEGORIES = [
-  "Grains",
-  "Canned Goods",
-  "Produce",
-  "Dairy",
-  "Protein",
-  "Snacks",
-  "Beverages",
-  "Other",
+  "Grains", "Canned Goods", "Produce", "Dairy",
+  "Protein", "Snacks", "Beverages", "Other",
 ];
 
 export default function InventoryPage() {
@@ -40,8 +34,11 @@ export default function InventoryPage() {
   const [checkpointNotes, setCheckpointNotes] = useState("");
   const [checkpointLoading, setCheckpointLoading] = useState(false);
 
-    // Fetch items from database with filters and sorting
-     useEffect(() => {
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportDateFrom, setExportDateFrom] = useState("");
+  const [exportDateTo, setExportDateTo] = useState("");
+
+  useEffect(() => {
     supabase.from("programs").select("*").then(({ data }) => {
       if (data) setPrograms(data);
     });
@@ -51,7 +48,6 @@ export default function InventoryPage() {
     setLoading(true);
     setError(null);
     try {
-      // Join vendors and programs tables so we get their names too
       const { data, error } = await supabase
         .from("items")
         .select("*, vendors(name), programs(name)")
@@ -69,14 +65,14 @@ export default function InventoryPage() {
     fetchItems();
   }, [fetchItems]);
 
-   const filtered = items.filter((item) => {
+  const filtered = items.filter((item) => {
     const vendorName = item.vendors?.name || "";
     const matchSearch =
       !search ||
       item.name.toLowerCase().includes(search.toLowerCase()) ||
       vendorName.toLowerCase().includes(search.toLowerCase());
-    const matchCat = filterCategory === "All" || item.category === filterCategory;
-    const matchProg = filterProgram === "All" || item.program_id === filterProgram;
+    const matchCat = !filterCategory || filterCategory === "All" || item.category === filterCategory;
+    const matchProg = !filterProgram || filterProgram === "All" || item.program_id === filterProgram;
     const matchLow = !filterLowStock || item.quantity <= (item.low_stock_threshold ?? 5);
     return matchSearch && matchCat && matchProg && matchLow;
   });
@@ -103,8 +99,6 @@ export default function InventoryPage() {
         .update({ quantity: newQty })
         .eq("id", restockItem.id);
       if (updateErr) throw updateErr;
-
-      // Write to audit_log — details is jsonb so we pass an object
       await supabase.from("audit_log").insert({
         action: "restock",
         details: {
@@ -115,7 +109,6 @@ export default function InventoryPage() {
           notes: restockNotes || null,
         },
       });
-
       setShowRestockModal(false);
       fetchItems();
     } catch (err) {
@@ -137,7 +130,7 @@ export default function InventoryPage() {
       }));
       const { error } = await supabase.from("checkpoints").insert({
         notes: checkpointNotes || null,
-        snapshot, // snapshot is jsonb
+        snapshot,
       });
       if (error) throw error;
       setShowCheckpointModal(false);
@@ -150,17 +143,36 @@ export default function InventoryPage() {
     }
   };
 
-    const toggleSort = (field) => {
+  const toggleSort = (field) => {
     if (sortField === field) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else { setSortField(field); setSortDir("asc"); }
   };
 
   const exportCSV = () => {
-    const headers = ["Name", "Category", "Program", "Quantity", "Unit", "Weight", "Price/Unit", "Price/Weight", "Vendor"];
-    const rows = filtered.map((i) => [
-      i.name, i.category, i.programs?.name ?? "", i.quantity, i.unit,
-      i.weight ?? "", i.price_per_unit ?? "", i.price_per_weight ?? "",
+    let exportItems = filtered;
+
+    // Apply date range filter if set
+    if (exportDateFrom) {
+      exportItems = exportItems.filter((i) => new Date(i.created_at) >= new Date(exportDateFrom));
+    }
+    if (exportDateTo) {
+      // Include the full end date by going to end of that day
+      const end = new Date(exportDateTo);
+      end.setHours(23, 59, 59, 999);
+      exportItems = exportItems.filter((i) => new Date(i.created_at) <= end);
+    }
+
+    const headers = ["Name", "Category", "Program", "Quantity", "Weight (lbs)", "Price/Unit", "Price/lb", "Vendor", "Date Added"];
+    const rows = exportItems.map((i) => [
+      i.name,
+      i.category ?? "",
+      i.programs?.name ?? "",
+      i.quantity ?? "",
+      i.weight ?? "",
+      i.price_per_unit ?? "",
+      i.price_per_weight ?? "",
       i.vendors?.name ?? "",
+      i.created_at ? new Date(i.created_at).toLocaleDateString() : "",
     ]);
     const csv = [headers, ...rows]
       .map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","))
@@ -172,18 +184,19 @@ export default function InventoryPage() {
     a.download = `vt-pantry-inventory-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+    setShowExportModal(false);
   };
 
   return (
     <div className="inventory-page">
       <header className="page-header">
         <div className="header-left">
-          <h1> Inventory</h1>
+          <h1>Inventory</h1>
           <p className="subtitle">VT Food Pantry · Stock Management</p>
         </div>
         <div className="header-actions">
-          <button className="btn btn-secondary" onClick={() => setShowCheckpointModal(true)}> Save Checkpoint</button>
-          <button className="btn btn-secondary" onClick={exportCSV}> Export CSV</button>
+          <button className="btn btn-secondary" onClick={() => setShowCheckpointModal(true)}>Save Checkpoint</button>
+          <button className="btn btn-secondary" onClick={() => setShowExportModal(true)}>Export CSV</button>
           <button className="btn btn-primary" onClick={() => setShowAddForm(true)}>+ Add Item</button>
         </div>
       </header>
@@ -198,11 +211,11 @@ export default function InventoryPage() {
       <div className="filters-bar">
         <input className="search-input" placeholder="Search by name or vendor…" value={search} onChange={(e) => setSearch(e.target.value)} />
         <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}>
-          <option value="All">All Categories</option>
+          <option value="">All Categories</option>
           {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
         </select>
         <select value={filterProgram} onChange={(e) => setFilterProgram(e.target.value)}>
-          <option value="All">All Programs</option>
+          <option value="">All Programs</option>
           {programs.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
         <label className="toggle-label">
@@ -214,7 +227,7 @@ export default function InventoryPage() {
 
       {error && (
         <div className="error-banner">
-           Could not load inventory: {error}
+          Could not load inventory: {error}
           <button onClick={fetchItems}>Retry</button>
         </div>
       )}
@@ -230,6 +243,7 @@ export default function InventoryPage() {
         <InventoryTable items={filtered} sortField={sortField} sortDir={sortDir} onSort={toggleSort} onRestock={openRestock} onRefresh={fetchItems} programs={programs} />
       )}
 
+      {/* Add Item Modal */}
       {showAddForm && (
         <div className="modal-overlay" onClick={() => setShowAddForm(false)}>
           <div className="modal-box" onClick={(e) => e.stopPropagation()}>
@@ -242,6 +256,7 @@ export default function InventoryPage() {
         </div>
       )}
 
+      {/* Restock Modal */}
       {showRestockModal && restockItem && (
         <div className="modal-overlay" onClick={() => setShowRestockModal(false)}>
           <div className="modal-box modal-sm" onClick={(e) => e.stopPropagation()}>
@@ -251,11 +266,11 @@ export default function InventoryPage() {
             </div>
             <div className="restock-body">
               <p className="restock-item-name">{restockItem.name}</p>
-              <p className="restock-current">Current stock: <strong>{restockItem.quantity} {restockItem.unit}</strong></p>
+              <p className="restock-current">Current stock: <strong>{restockItem.quantity}</strong></p>
               <label>Add quantity<input type="number" min="1" placeholder="e.g. 24" value={restockQty} onChange={(e) => setRestockQty(e.target.value)} autoFocus /></label>
               <label>Notes (optional)<input type="text" placeholder="e.g. Invoice #1042" value={restockNotes} onChange={(e) => setRestockNotes(e.target.value)} /></label>
               {restockQty && !isNaN(Number(restockQty)) && (
-                <p className="restock-preview">New total: <strong>{(restockItem.quantity || 0) + Number(restockQty)} {restockItem.unit}</strong></p>
+                <p className="restock-preview">New total: <strong>{(restockItem.quantity || 0) + Number(restockQty)}</strong></p>
               )}
               <div className="modal-actions">
                 <button className="btn btn-secondary" onClick={() => setShowRestockModal(false)}>Cancel</button>
@@ -266,6 +281,7 @@ export default function InventoryPage() {
         </div>
       )}
 
+      {/* Checkpoint Modal */}
       {showCheckpointModal && (
         <div className="modal-overlay" onClick={() => setShowCheckpointModal(false)}>
           <div className="modal-box modal-sm" onClick={(e) => e.stopPropagation()}>
@@ -274,11 +290,36 @@ export default function InventoryPage() {
               <button className="modal-close" onClick={() => setShowCheckpointModal(false)}>✕</button>
             </div>
             <div className="restock-body">
-              <p>Saves a snapshot of all current stock as a new baseline. Use at semester start or after a big donation drive.</p>
+              <p>Saves a snapshot of all current stock as a new baseline.</p>
               <label>Notes (optional)<input type="text" placeholder="e.g. Start of Fall 2025" value={checkpointNotes} onChange={(e) => setCheckpointNotes(e.target.value)} /></label>
               <div className="modal-actions">
                 <button className="btn btn-secondary" onClick={() => setShowCheckpointModal(false)}>Cancel</button>
                 <button className="btn btn-primary" onClick={handleCheckpoint} disabled={checkpointLoading}>{checkpointLoading ? "Saving…" : "Save Checkpoint"}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Export CSV Modal */}
+      {showExportModal && (
+        <div className="modal-overlay" onClick={() => setShowExportModal(false)}>
+          <div className="modal-box modal-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Export CSV</h2>
+              <button className="modal-close" onClick={() => setShowExportModal(false)}>✕</button>
+            </div>
+            <div className="restock-body">
+              <p>Filter by date added. Leave blank to export all currently visible items.</p>
+              <label>From date
+                <input type="date" value={exportDateFrom} onChange={(e) => setExportDateFrom(e.target.value)} />
+              </label>
+              <label>To date
+                <input type="date" value={exportDateTo} onChange={(e) => setExportDateTo(e.target.value)} />
+              </label>
+              <div className="modal-actions">
+                <button className="btn btn-secondary" onClick={() => setShowExportModal(false)}>Cancel</button>
+                <button className="btn btn-primary" onClick={exportCSV}>Download CSV</button>
               </div>
             </div>
           </div>

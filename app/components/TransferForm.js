@@ -2,8 +2,8 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 
-export default function TransferForm({programs, onSuccess, onCancel }) {
-    const [items, setItems] = useState([]);
+export default function TransferForm({ programs, onSuccess, onCancel }) {
+  const [items, setItems] = useState([]);
   const [itemId, setItemId] = useState("");
   const [quantity, setQuantity] = useState("");
   const [fromProgram, setFromProgram] = useState("");
@@ -11,76 +11,77 @@ export default function TransferForm({programs, onSuccess, onCancel }) {
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);
 
-  //fetch items for dropdown
   useEffect(() => {
-    supabase.from("items").select("id, name, quantity, unit").order("name").then(({ data }) => {
+    supabase.from("items").select("id, name, quantity").order("name").then(({ data }) => {
       setItems(data || []);
     });
   }, []);
 
   const selectedItem = items.find((i) => i.id === itemId);
 
-    const handleSubmit = async () => {
-        if (!itemId || !quantity || !fromProgram || !toProgram) {
-            alert("Please fill in all fields");
-            return;
-        }
-        if (fromProgram === toProgram) {
-            alert("From and To programs cannot be the same");
-            return;
-        }
-        const qtyNum = Number(quantity);
-        if (isNaN(qtyNum) || qtyNum <= 0) {
-            alert("Quantity must be a positive number");
-            return;
-        }
-        if (selectedItem && qty > selectedItem.quantity) {
+  const handleSubmit = async () => {
+    if (!itemId || !quantity || !fromProgram || !toProgram) {
+      alert("Please fill in all fields");
+      return;
+    }
+    if (fromProgram === toProgram) {
+      alert("From and To programs cannot be the same");
+      return;
+    }
+    const qtyNum = Number(quantity);
+    if (isNaN(qtyNum) || qtyNum <= 0) {
+      alert("Quantity must be a positive number");
+      return;
+    }
+    if (selectedItem && qtyNum > selectedItem.quantity) {
       alert(`Not enough stock. Current quantity: ${selectedItem.quantity}`);
       return;
     }
-        setLoading(true);
-        try {
-            // Insert transfer record
-            const { error: transferError } = await supabase.from("transfers").insert({
-                item_id: itemId,
-                type: "transfer",
-                quantity: qtyNum,
-                from_program_id: fromProgram,
-                to_program_id: toProgram,
-                note,
-            });
-            if (transferError) throw transferError;
+    setLoading(true);
+    try {
+      const { error: transferError } = await supabase.from("transactions").insert({
+        item_id: itemId,
+        type: "transfer",
+        quantity: qtyNum,
+        from_program: fromProgram,
+        to_program: toProgram,
+        note,
+      });
+      if (transferError) throw transferError;
 
-            // Update item quantity
-            const { error: updateError } = await supabase.from("items").update({
-                quantity: selectedItem.quantity - qtyNum
-            }).eq("id", itemId);
-            if (updateError) throw updateError;
+      const { error: updateError } = await supabase.from("items")
+        .update({ quantity: selectedItem.quantity - qtyNum })
+        .eq("id", itemId);
+      if (updateError) throw updateError;
 
-            //audit log
-            await supabase.from("audit_log").insert({
-                action: "transfer",
-                item_id: itemId,
-                details: { item_id: itemId, item_name: selectedItem.name, quantity: qtyNum, from_program_id: fromProgram, to_program_id: toProgram, note },
-            });
+      await supabase.from("audit_log").insert({
+        action: "transfer",
+        details: {
+          item_id: itemId,
+          item_name: selectedItem.name,
+          quantity: qtyNum,
+          from_program: fromProgram,
+          to_program: toProgram,
+          note,
+        },
+      });
 
-            onSuccess();
-        } catch (error) {
-            alert("Error processing transfer: " + error.message);
-        } finally {
-            setLoading(false);
-        }
-    };
-    
-    //STYLE
-    return (
+      onSuccess();
+    } catch (error) {
+      alert("Error processing transfer: " + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
     <div className="form-body">
       <label>
         Item *
         <select value={itemId} onChange={(e) => setItemId(e.target.value)}>
           <option value="">Select an item…</option>
           {items.map((i) => (
-            <option key={i.id} value={i.id}>{i.name} (stock: {i.quantity} {i.unit})</option>
+            <option key={i.id} value={i.id}>{i.name} (stock: {i.quantity})</option>
           ))}
         </select>
       </label>
@@ -97,7 +98,7 @@ export default function TransferForm({programs, onSuccess, onCancel }) {
       </label>
       {selectedItem && quantity && !isNaN(Number(quantity)) && (
         <p className="stock-note">
-          Remaining after transfer: <strong>{selectedItem.quantity - Number(quantity)} {selectedItem.unit}</strong>
+          Remaining after transfer: <strong>{selectedItem.quantity - Number(quantity)}</strong>
         </p>
       )}
 
