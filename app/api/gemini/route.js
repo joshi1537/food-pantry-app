@@ -10,10 +10,10 @@ export async function POST(request) {
       return Response.json({ error: "Missing GEMINI_API_KEY" }, { status: 500 });
     }
 
-    const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
-      systemInstruction: context,
-    });
+const model = genAI.getGenerativeModel({
+  model: "gemini-2.0-flash",
+  systemInstruction: context,
+});
 
     const chat = model.startChat({
       history: history || [],
