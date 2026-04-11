@@ -179,7 +179,7 @@ export default function VendorsPage() {
     <div className="page">
       <header className="page-header">
         <div>
-          <h1>🏪 Vendors</h1>
+          <h1>Vendors</h1>
           <p className="subtitle">VT Food Pantry · Supplier Directory</p>
         </div>
 
