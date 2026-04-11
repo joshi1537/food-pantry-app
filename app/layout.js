@@ -1,5 +1,6 @@
 import "./globals.css"
 import Navbar from "./components/Navbar"
+import ChatWidget from "./components/ChatWidget"
 
 export const metadata = {
   title: "VT Food Pantry",
@@ -17,6 +18,7 @@ export default function RootLayout({ children }) {
       <body>
         <Navbar />
         <main className="main-content">{children}</main>
+        <ChatWidget />
       </body>
     </html>
   )
