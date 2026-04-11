@@ -20,7 +20,6 @@ export default function AddItemForm({ onSuccess, onCancel, programs: programsPro
     vendor_id: "",
     weight: "",
     quantity: "",
-    unit: "",
     price_per_unit: "",
     price_per_weight: "",
     program_id: "",
@@ -48,7 +47,6 @@ export default function AddItemForm({ onSuccess, onCancel, programs: programsPro
         vendor_id: form.vendor_id || null,
         weight: form.weight !== "" ? Number(form.weight) : null,
         quantity: form.quantity !== "" ? Number(form.quantity) : 0,
-        unit: form.unit || null,
         price_per_unit: form.price_per_unit !== "" ? Number(form.price_per_unit) : null,
         price_per_weight: form.price_per_weight !== "" ? Number(form.price_per_weight) : null,
         program_id: form.program_id || null,
@@ -89,10 +87,6 @@ export default function AddItemForm({ onSuccess, onCancel, programs: programsPro
           <div className="field">
             <label>Quantity</label>
             <input name="quantity" type="number" min="0" placeholder="e.g. 48" value={form.quantity} onChange={set} />
-          </div>
-          <div className="field">
-            <label>Unit</label>
-            <input name="unit" placeholder="e.g. cans, lbs, boxes" value={form.unit} onChange={set} />
           </div>
           <div className="field">
             <label>Weight per unit (lbs)</label>

@@ -45,11 +45,10 @@ export default function TransfersPage() {
       ) : (
         <div className="table-wrap">
           {transfers.length === 0 ? (
-            <div className="empty-state">
-              <p style={{ fontSize: "2rem" }}>↔️</p>
-              <p>No transfers yet.</p>
-              <button className="btn btn-primary" onClick={() => setShowForm(true)}>+ New Transfer</button>
-            </div>
+          <div className="empty-state">
+            <p style={{ fontSize: "2rem" }}>↔️</p>
+             <p>No transfers yet.</p>
+              </div>
           ) : (
             <table className="t-table">
               <thead>

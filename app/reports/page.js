@@ -11,6 +11,7 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true);
   const [rollingOver, setRollingOver] = useState(false);
   const [expandedCheckpoint, setExpandedCheckpoint] = useState(null);
+  const [showRolloverModal, setShowRolloverModal] = useState(false);
 
   useEffect(() => {
     const fetchAll = async () => {
@@ -29,7 +30,6 @@ export default function ReportsPage() {
     fetchAll();
   }, []);
 
-  // Stats
   const totalItems = items.length;
   const totalUnits = items.reduce((s, i) => s + (i.quantity || 0), 0);
   const totalWeight = items.reduce((s, i) => s + (i.weight || 0) * (i.quantity || 0), 0);
@@ -51,10 +51,10 @@ export default function ReportsPage() {
   const maxProgVal = Math.max(...Object.values(byProgram), 1);
 
   const exportCSV = () => {
-    const headers = ["Name", "Category", "Program", "Quantity", "Unit", "Weight (lbs)", "$/Unit", "$/lb"];
+    const headers = ["Name", "Category", "Program", "Quantity", "Weight (lbs)", "$/Unit", "$/lb"];
     const rows = items.map((i) => [
       i.name, i.category || "", i.programs?.name || "",
-      i.quantity, i.unit || "", i.weight ?? "",
+      i.quantity, i.weight ?? "",
       i.price_per_unit ?? "", i.price_per_weight ?? "",
     ]);
     const csv = [headers, ...rows]
@@ -70,10 +70,9 @@ export default function ReportsPage() {
   };
 
   const handleYearRollover = async () => {
-    if (!confirm("End-of-Year Rollover: This will save a checkpoint of all current stock, then reset all quantities to 0. This cannot be undone. Continue?")) return;
+    setShowRolloverModal(false);
     setRollingOver(true);
     try {
-      // 1. Save checkpoint
       const snapshot = items.map((i) => ({
         item_id: i.id, item_name: i.name,
         quantity: i.quantity, category: i.category, program_id: i.program_id,
@@ -84,17 +83,14 @@ export default function ReportsPage() {
       });
       if (cpErr) throw cpErr;
 
-      // 2. Reset all quantities to 0
       const { error: resetErr } = await supabase.from("items").update({ quantity: 0 }).gte("quantity", 0);
       if (resetErr) throw resetErr;
 
-      // 3. Audit log
       await supabase.from("audit_log").insert({
         action: "rollover",
         details: { year: new Date().getFullYear(), items_count: items.length },
       });
 
-      alert("✅ Year rollover complete! A checkpoint was saved and all quantities reset to 0.");
       window.location.reload();
     } catch (err) {
       alert("Error during rollover: " + err.message);
@@ -119,7 +115,7 @@ export default function ReportsPage() {
         </div>
         <div className="header-actions">
           <button className="btn btn-secondary" onClick={exportCSV}>⬇ Export CSV</button>
-          <button className="btn btn-danger" onClick={handleYearRollover} disabled={rollingOver}>
+          <button className="btn btn-danger" onClick={() => setShowRolloverModal(true)} disabled={rollingOver}>
             {rollingOver ? "Processing…" : "📅 Year Rollover"}
           </button>
         </div>
@@ -133,7 +129,6 @@ export default function ReportsPage() {
       </div>
 
       <div className="content">
-        {/* Charts */}
         <div className="card">
           <h2>Units by Category</h2>
           {Object.keys(byCategory).length === 0 ? <p className="empty-note">No data yet.</p> : (
@@ -164,7 +159,6 @@ export default function ReportsPage() {
           )}
         </div>
 
-        {/* Low stock */}
         {lowStock.length > 0 && (
           <div className="card card-full">
             <h2>⚠️ Low Stock Items</h2>
@@ -176,7 +170,7 @@ export default function ReportsPage() {
                     <td className="td-name">{i.name}</td>
                     <td>{i.category}</td>
                     <td>{i.programs?.name ?? "—"}</td>
-                    <td className="td-low">{i.quantity} {i.unit}</td>
+                    <td className="td-low">{i.quantity}</td>
                     <td>{i.low_stock_threshold ?? 5}</td>
                   </tr>
                 ))}
@@ -185,11 +179,10 @@ export default function ReportsPage() {
           </div>
         )}
 
-        {/* Checkpoint history */}
         <div className="card card-full">
           <h2>📸 Checkpoint History</h2>
           {checkpoints.length === 0 ? (
-            <p className="empty-note">No checkpoints saved yet. Use "Save Checkpoint" on the Inventory page to create a baseline snapshot.</p>
+            <p className="empty-note">No checkpoints saved yet.</p>
           ) : (
             <div className="checkpoint-list">
               {checkpoints.map((cp) => (
@@ -224,7 +217,6 @@ export default function ReportsPage() {
           )}
         </div>
 
-        {/* Recent activity */}
         <div className="card card-full">
           <h2>Recent Activity</h2>
           {auditLog.length === 0 ? <p className="empty-note">No activity logged yet.</p> : (
@@ -249,6 +241,32 @@ export default function ReportsPage() {
         </div>
       </div>
 
+      {/* Year Rollover Confirmation Modal */}
+      {showRolloverModal && (
+        <div className="modal-overlay" onClick={() => setShowRolloverModal(false)}>
+          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>📅 Year Rollover</h2>
+              <button className="modal-close" onClick={() => setShowRolloverModal(false)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <div className="warning-icon">⚠️</div>
+              <p className="warning-title">This cannot be undone.</p>
+              <p className="warning-desc">This will:</p>
+              <ul className="warning-list">
+                <li>✅ Save a checkpoint snapshot of all current stock</li>
+                <li>🔄 Reset all item quantities to 0</li>
+              </ul>
+              <p className="warning-desc">Use this at the end of the academic year to start fresh while keeping a record of this year's inventory.</p>
+              <div className="modal-actions">
+                <button className="btn btn-secondary" onClick={() => setShowRolloverModal(false)}>Cancel</button>
+                <button className="btn btn-danger" onClick={handleYearRollover}>Yes, Run Rollover</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <style jsx>{`
         .page { min-height: 100vh; background: #f7f8fa; font-family: "DM Sans", sans-serif; padding: 0 0 60px; }
         .page-header { display: flex; align-items: center; justify-content: space-between; padding: 28px 36px 20px; background: #fff; border-bottom: 2px solid #e8eaed; flex-wrap: wrap; gap: 12px; }
@@ -258,8 +276,8 @@ export default function ReportsPage() {
         .btn { padding: 9px 18px; border-radius: 8px; font-size: 0.875rem; font-weight: 600; cursor: pointer; border: none; font-family: "DM Sans", sans-serif; transition: all 0.15s; }
         .btn-secondary { background: #fff; color: #374151; border: 1.5px solid #d1d5db; }
         .btn-secondary:hover { background: #f3f4f6; }
-        .btn-danger { background: #fff; color: #b91c1c; border: 1.5px solid #fca5a5; }
-        .btn-danger:hover:not(:disabled) { background: #fef2f2; }
+        .btn-danger { background: #b91c1c; color: #fff; border: none; }
+        .btn-danger:hover:not(:disabled) { background: #991b1b; }
         .btn:disabled { opacity: 0.55; cursor: not-allowed; }
         .btn-sm { padding: 4px 12px; border-radius: 6px; font-size: 0.78rem; font-weight: 600; cursor: pointer; border: 1.5px solid #d1d5db; background: #fff; color: #374151; white-space: nowrap; }
         .btn-sm:hover { background: #f3f4f6; }
@@ -302,6 +320,19 @@ export default function ReportsPage() {
         .checkpoint-note { font-size: 0.85rem; color: #6b7280; font-style: italic; flex: 1; }
         .checkpoint-count { font-size: 0.78rem; background: #f3f4f6; color: #374151; padding: 2px 10px; border-radius: 999px; font-weight: 600; }
         .checkpoint-detail { margin-top: 4px; border-top: 1px solid #f0f0f0; padding-top: 12px; }
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
+        .modal-box { background: #fff; border-radius: 14px; width: 100%; max-width: 420px; box-shadow: 0 20px 60px rgba(0,0,0,0.25); }
+        .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 20px 24px 0; }
+        .modal-header h2 { font-size: 1.1rem; font-weight: 700; color: #1a1a2e; margin: 0; }
+        .modal-close { background: none; border: none; font-size: 1.1rem; cursor: pointer; color: #6b7280; padding: 4px 8px; border-radius: 6px; }
+        .modal-close:hover { background: #f3f4f6; }
+        .modal-body { padding: 20px 24px 24px; display: flex; flex-direction: column; gap: 12px; }
+        .warning-icon { font-size: 2rem; text-align: center; }
+        .warning-title { font-size: 1rem; font-weight: 700; color: #b91c1c; text-align: center; margin: 0; }
+        .warning-desc { font-size: 0.875rem; color: #4b5563; margin: 0; }
+        .warning-list { margin: 0; padding-left: 4px; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+        .warning-list li { font-size: 0.875rem; color: #374151; background: #f9fafb; padding: 8px 12px; border-radius: 8px; }
+        .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 8px; padding-top: 12px; border-top: 1px solid #f0f0f0; }
         @media (max-width: 640px) { .content { grid-template-columns: 1fr; } .page-header { padding: 20px; } }
       `}</style>
     </div>

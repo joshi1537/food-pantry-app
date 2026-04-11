@@ -154,7 +154,7 @@ export default function DashboardPage() {
         <div className="card">
           <h2 className="card-title">⚠️ Low Stock Alerts</h2>
           {lowStockItems.length === 0 ? (
-            <p className="empty-text all-good">✅ All items sufficiently stocked!</p>
+            <p className="empty-text all-good">All items sufficiently stocked!</p>
           ) : (
             <div className="alert-list">
               {lowStockItems.map((item) => (
