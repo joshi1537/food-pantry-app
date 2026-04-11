@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabase';
 export default function ChatWidget() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([
-    { role: 'assistant', text: "Hey! I'm the VT Food Pantry assistant,  Ask me anything about the pantry or inventory!" }
+    { role: 'assistant', text: "Hey! I'm the VT Food Pantry assistant! Ask me anything about the pantry or inventory!" }
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -95,16 +95,20 @@ Keep answers concise and friendly. You are embedded in the VT Food Pantry app us
 
   return (
     <>
-      {/* Floating button */}
       <button className="chat-fab" onClick={() => setOpen(o => !o)} title="Ask the pantry assistant">
-        {open ? '✕' : ''}
+        {open ? '✕' : '💬'}
       </button>
 
-      {/* Chat window */}
       {open && (
         <div className="chat-window">
           <div className="chat-header">
-            <span> Pantry Assistant</span>
+            <div className="chat-header-left">
+              <div className="chat-avatar">💬</div>
+              <div>
+                <p className="chat-title">Pantry Assistant</p>
+                <p className="chat-subtitle">Powered by Gemini AI</p>
+              </div>
+            </div>
             <button className="chat-close" onClick={() => setOpen(false)}>✕</button>
           </div>
 
@@ -140,61 +144,85 @@ Keep answers concise and friendly. You are embedded in the VT Food Pantry app us
       <style jsx>{`
         .chat-fab {
           position: fixed;
-          bottom: 24px;
-          right: 24px;
-          width: 56px;
-          height: 56px;
+          bottom: 28px;
+          right: 28px;
+          width: 60px;
+          height: 60px;
           border-radius: 50%;
           background: #861f41;
           color: #fff;
-          font-size: 1.5rem;
+          font-size: 1.6rem;
           border: none;
           cursor: pointer;
-          box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+          box-shadow: 0 4px 24px rgba(134,31,65,0.4);
           z-index: 200;
           transition: transform 0.15s, background 0.15s;
           display: flex;
           align-items: center;
           justify-content: center;
         }
-        .chat-fab:hover { background: #6e1835; transform: scale(1.08); }
+        .chat-fab:hover { background: #6e1835; transform: scale(1.1); }
 
         .chat-window {
           position: fixed;
-          bottom: 90px;
-          right: 24px;
-          width: 340px;
-          max-height: 480px;
+          bottom: 100px;
+          right: 28px;
+          width: 350px;
+          max-height: 500px;
           background: #fff;
-          border-radius: 16px;
+          border-radius: 18px;
           box-shadow: 0 8px 40px rgba(0,0,0,0.18);
           z-index: 200;
           display: flex;
           flex-direction: column;
           overflow: hidden;
           font-family: "DM Sans", sans-serif;
+          border: 1px solid #e5e7eb;
         }
 
         .chat-header {
           background: #861f41;
           color: #fff;
           padding: 14px 16px;
-          font-weight: 700;
-          font-size: 0.95rem;
           display: flex;
           align-items: center;
           justify-content: space-between;
         }
+        .chat-header-left {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+        .chat-avatar {
+          width: 36px;
+          height: 36px;
+          background: rgba(255,255,255,0.2);
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 1.1rem;
+        }
+        .chat-title {
+          font-weight: 700;
+          font-size: 0.95rem;
+          margin: 0;
+        }
+        .chat-subtitle {
+          font-size: 0.72rem;
+          opacity: 0.8;
+          margin: 0;
+        }
         .chat-close {
-          background: none;
+          background: rgba(255,255,255,0.15);
           border: none;
           color: #fff;
           cursor: pointer;
-          font-size: 1rem;
-          padding: 2px 6px;
-          border-radius: 4px;
+          font-size: 0.9rem;
+          padding: 4px 8px;
+          border-radius: 6px;
         }
-        .chat-close:hover { background: rgba(255,255,255,0.15); }
+        .chat-close:hover { background: rgba(255,255,255,0.25); }
 
         .chat-messages {
           flex: 1;
@@ -203,11 +231,12 @@ Keep answers concise and friendly. You are embedded in the VT Food Pantry app us
           display: flex;
           flex-direction: column;
           gap: 8px;
+          background: #f9fafb;
         }
 
         .bubble {
-          padding: 9px 13px;
-          border-radius: 12px;
+          padding: 10px 14px;
+          border-radius: 14px;
           font-size: 0.875rem;
           line-height: 1.5;
           max-width: 85%;
@@ -220,10 +249,11 @@ Keep answers concise and friendly. You are embedded in the VT Food Pantry app us
           border-bottom-right-radius: 4px;
         }
         .bubble.assistant {
-          background: #f3f4f6;
+          background: #fff;
           color: #1f2937;
           align-self: flex-start;
           border-bottom-left-radius: 4px;
+          box-shadow: 0 1px 4px rgba(0,0,0,0.08);
         }
 
         .bubble.typing {
@@ -251,23 +281,26 @@ Keep answers concise and friendly. You are embedded in the VT Food Pantry app us
           gap: 8px;
           padding: 10px 12px;
           border-top: 1px solid #e5e7eb;
+          background: #fff;
         }
         .chat-input-row input {
           flex: 1;
-          padding: 8px 12px;
+          padding: 9px 13px;
           border: 1.5px solid #d1d5db;
-          border-radius: 8px;
+          border-radius: 10px;
           font-size: 0.875rem;
           font-family: inherit;
           outline: none;
+          background: #f9fafb;
         }
-        .chat-input-row input:focus { border-color: #861f41; }
+        .chat-input-row input:focus { border-color: #861f41; background: #fff; }
+        .chat-input-row input::placeholder { color: #9ca3af; }
         .chat-input-row button {
-          padding: 8px 12px;
+          padding: 9px 14px;
           background: #861f41;
           color: #fff;
           border: none;
-          border-radius: 8px;
+          border-radius: 10px;
           cursor: pointer;
           font-size: 1rem;
           transition: background 0.15s;
