@@ -52,11 +52,14 @@ export default function InventoryPage() {
         .from("items")
         .select("*, vendors(name), programs(name)")
         .order(sortField, { ascending: sortDir === "asc" });
+
       if (error) throw error;
       setItems(data || []);
-    } catch (err) {
+    }
+    catch (err) {
       setError(err.message);
-    } finally {
+    }
+    finally {
       setLoading(false);
     }
   }, [sortField, sortDir]);
@@ -71,16 +74,28 @@ export default function InventoryPage() {
       !search ||
       item.name.toLowerCase().includes(search.toLowerCase()) ||
       vendorName.toLowerCase().includes(search.toLowerCase());
-    const matchCat = !filterCategory || filterCategory === "All" || item.category === filterCategory;
-    const matchProg = !filterProgram || filterProgram === "All" || item.program_id === filterProgram;
-    const matchLow = !filterLowStock || item.quantity <= (item.low_stock_threshold ?? 5);
+
+    const matchCat =
+      !filterCategory || filterCategory === "All" || item.category === filterCategory;
+
+    const matchProg =
+      !filterProgram || filterProgram === "All" || item.program_id === filterProgram;
+
+    const matchLow =
+      !filterLowStock || item.quantity <= (item.low_stock_threshold ?? 5);
+
     return matchSearch && matchCat && matchProg && matchLow;
   });
 
   const totalItems = items.length;
   const totalUnits = items.reduce((s, i) => s + (i.quantity || 0), 0);
-  const lowStockCount = items.filter((i) => i.quantity <= (i.low_stock_threshold ?? 5)).length;
-  const totalWeight = items.reduce((s, i) => s + (i.weight || 0) * (i.quantity || 0), 0);
+  const lowStockCount = items.filter(
+    (i) => i.quantity <= (i.low_stock_threshold ?? 5)
+  ).length;
+  const totalWeight = items.reduce(
+    (s, i) => s + (i.weight || 0) * (i.quantity || 0),
+    0
+  );
 
   const openRestock = (item) => {
     setRestockItem(item);
@@ -91,14 +106,18 @@ export default function InventoryPage() {
 
   const handleRestock = async () => {
     if (!restockItem || !restockQty || isNaN(Number(restockQty))) return;
+
     setRestockLoading(true);
     try {
       const newQty = (restockItem.quantity || 0) + Number(restockQty);
+
       const { error: updateErr } = await supabase
         .from("items")
         .update({ quantity: newQty })
         .eq("id", restockItem.id);
+
       if (updateErr) throw updateErr;
+
       await supabase.from("audit_log").insert({
         action: "restock",
         details: {
@@ -109,11 +128,14 @@ export default function InventoryPage() {
           notes: restockNotes || null,
         },
       });
+
       setShowRestockModal(false);
       fetchItems();
-    } catch (err) {
+    }
+    catch (err) {
       alert("Error restocking: " + err.message);
-    } finally {
+    }
+    finally {
       setRestockLoading(false);
     }
   };
@@ -128,43 +150,67 @@ export default function InventoryPage() {
         category: item.category,
         program_id: item.program_id,
       }));
+
       const { error } = await supabase.from("checkpoints").insert({
         notes: checkpointNotes || null,
         snapshot,
       });
+
       if (error) throw error;
+
       setShowCheckpointModal(false);
       setCheckpointNotes("");
       alert("Checkpoint saved!");
-    } catch (err) {
+    }
+    catch (err) {
       alert("Error saving checkpoint: " + err.message);
-    } finally {
+    }
+    finally {
       setCheckpointLoading(false);
     }
   };
 
   const toggleSort = (field) => {
-    if (sortField === field) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else { setSortField(field); setSortDir("asc"); }
+    if (sortField === field) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    }
+    else {
+      setSortField(field);
+      setSortDir("asc");
+    }
   };
 
   const exportCSV = () => {
-    let exportItems = filtered;
+    let exportItems = [...filtered];
 
-    // Apply date range filter if set
     if (exportDateFrom) {
-      exportItems = exportItems.filter((i) => new Date(i.created_at) >= new Date(exportDateFrom));
-    }
-    if (exportDateTo) {
-      // Include the full end date by going to end of that day
-      const end = new Date(exportDateTo);
-      end.setHours(23, 59, 59, 999);
-      exportItems = exportItems.filter((i) => new Date(i.created_at) <= end);
+      const from = new Date(`${exportDateFrom}T00:00:00`);
+      exportItems = exportItems.filter(
+        (i) => i.created_at && new Date(i.created_at) >= from
+      );
     }
 
-    const headers = ["Name", "Category", "Program", "Quantity", "Weight (lbs)", "Price/Unit", "Price/lb", "Vendor", "Date Added"];
+    if (exportDateTo) {
+      const to = new Date(`${exportDateTo}T23:59:59.999`);
+      exportItems = exportItems.filter(
+        (i) => i.created_at && new Date(i.created_at) <= to
+      );
+    }
+
+    const headers = [
+      "Name",
+      "Category",
+      "Program",
+      "Quantity",
+      "Weight (lbs)",
+      "Price/Unit",
+      "Price/lb",
+      "Vendor",
+      "Date Added",
+    ];
+
     const rows = exportItems.map((i) => [
-      i.name,
+      i.name ?? "",
       i.category ?? "",
       i.programs?.name ?? "",
       i.quantity ?? "",
@@ -174,16 +220,32 @@ export default function InventoryPage() {
       i.vendors?.name ?? "",
       i.created_at ? new Date(i.created_at).toLocaleDateString() : "",
     ]);
+
     const csv = [headers, ...rows]
-      .map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","))
+      .map((r) =>
+        r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")
+      )
       .join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `vt-pantry-inventory-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = window.URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute(
+      "download",
+      `vt-pantry-inventory-${new Date().toISOString().slice(0, 10)}.csv`
+    );
+    link.style.display = "none";
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    setTimeout(() => {
+      window.URL.revokeObjectURL(url);
+    }, 100);
+
     setShowExportModal(false);
   };
 
@@ -195,31 +257,66 @@ export default function InventoryPage() {
           <p className="subtitle">VT Food Pantry · Stock Management</p>
         </div>
         <div className="header-actions">
-          <button className="btn btn-secondary" onClick={() => setShowCheckpointModal(true)}>Save Checkpoint</button>
-          <button className="btn btn-secondary" onClick={() => setShowExportModal(true)}>Export CSV</button>
-          <button className="btn btn-primary" onClick={() => setShowAddForm(true)}>+ Add Item</button>
+          <button className="btn btn-secondary" onClick={() => setShowCheckpointModal(true)}>
+            Save Checkpoint
+          </button>
+          <button className="btn btn-secondary" onClick={() => setShowExportModal(true)}>
+            Export CSV
+          </button>
+          <button className="btn btn-primary" onClick={() => setShowAddForm(true)}>
+            + Add Item
+          </button>
         </div>
       </header>
 
       <div className="stats-bar">
-        <div className="stat"><span className="stat-value">{totalItems}</span><span className="stat-label">Item Types</span></div>
-        <div className="stat"><span className="stat-value">{totalUnits.toLocaleString()}</span><span className="stat-label">Total Units</span></div>
-        <div className="stat"><span className="stat-value">{totalWeight.toLocaleString(undefined, { maximumFractionDigits: 0 })} lbs</span><span className="stat-label">Est. Weight</span></div>
-        <div className={`stat ${lowStockCount > 0 ? "stat-warn" : ""}`}><span className="stat-value">{lowStockCount}</span><span className="stat-label">Low Stock</span></div>
+        <div className="stat">
+          <span className="stat-value">{totalItems}</span>
+          <span className="stat-label">Item Types</span>
+        </div>
+        <div className="stat">
+          <span className="stat-value">{totalUnits.toLocaleString()}</span>
+          <span className="stat-label">Total Units</span>
+        </div>
+        <div className="stat">
+          <span className="stat-value">
+            {totalWeight.toLocaleString(undefined, { maximumFractionDigits: 0 })} lbs
+          </span>
+          <span className="stat-label">Est. Weight</span>
+        </div>
+        <div className={`stat ${lowStockCount > 0 ? "stat-warn" : ""}`}>
+          <span className="stat-value">{lowStockCount}</span>
+          <span className="stat-label">Low Stock</span>
+        </div>
       </div>
 
       <div className="filters-bar">
-        <input className="search-input" placeholder="Search by name or vendor…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <input
+          className="search-input"
+          placeholder="Search by name or vendor…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
         <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}>
           <option value="">All Categories</option>
-          {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+          {CATEGORIES.map((c) => (
+            <option key={c}>{c}</option>
+          ))}
         </select>
         <select value={filterProgram} onChange={(e) => setFilterProgram(e.target.value)}>
           <option value="">All Programs</option>
-          {programs.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          {programs.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
         </select>
         <label className="toggle-label">
-          <input type="checkbox" checked={filterLowStock} onChange={(e) => setFilterLowStock(e.target.checked)} />
+          <input
+            type="checkbox"
+            checked={filterLowStock}
+            onChange={(e) => setFilterLowStock(e.target.checked)}
+          />
           &nbsp;Low Stock Only
         </label>
         <span className="result-count">{filtered.length} items</span>
@@ -233,93 +330,183 @@ export default function InventoryPage() {
       )}
 
       {loading ? (
-        <div className="loading-state"><div className="spinner" /><p>Loading inventory…</p></div>
+        <div className="loading-state">
+          <div className="spinner" />
+          <p>Loading inventory…</p>
+        </div>
       ) : filtered.length === 0 ? (
         <div className="empty-state">
-          <p>{items.length === 0 ? "No items yet. Add your first item to get started." : "No items match your filters."}</p>
-          {items.length === 0 && <button className="btn btn-primary" onClick={() => setShowAddForm(true)}>+ Add First Item</button>}
+          <p>
+            {items.length === 0
+              ? "No items yet. Add your first item to get started."
+              : "No items match your filters."}
+          </p>
+          {items.length === 0 && (
+            <button className="btn btn-primary" onClick={() => setShowAddForm(true)}>
+              + Add First Item
+            </button>
+          )}
         </div>
       ) : (
-        <InventoryTable items={filtered} sortField={sortField} sortDir={sortDir} onSort={toggleSort} onRestock={openRestock} onRefresh={fetchItems} programs={programs} />
+        <InventoryTable
+          items={filtered}
+          sortField={sortField}
+          sortDir={sortDir}
+          onSort={toggleSort}
+          onRestock={openRestock}
+          onRefresh={fetchItems}
+          programs={programs}
+        />
       )}
 
-      {/* Add Item Modal */}
       {showAddForm && (
         <div className="modal-overlay" onClick={() => setShowAddForm(false)}>
           <div className="modal-box" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Add New Item</h2>
-              <button className="modal-close" onClick={() => setShowAddForm(false)}>✕</button>
+              <button className="modal-close" onClick={() => setShowAddForm(false)}>
+                ✕
+              </button>
             </div>
-            <AddItemForm onSuccess={() => { setShowAddForm(false); fetchItems(); }} onCancel={() => setShowAddForm(false)} programs={programs} />
+            <AddItemForm
+              onSuccess={() => {
+                setShowAddForm(false);
+                fetchItems();
+              }}
+              onCancel={() => setShowAddForm(false)}
+              programs={programs}
+            />
           </div>
         </div>
       )}
 
-      {/* Restock Modal */}
       {showRestockModal && restockItem && (
         <div className="modal-overlay" onClick={() => setShowRestockModal(false)}>
           <div className="modal-box modal-sm" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Quick Restock</h2>
-              <button className="modal-close" onClick={() => setShowRestockModal(false)}>✕</button>
+              <button className="modal-close" onClick={() => setShowRestockModal(false)}>
+                ✕
+              </button>
             </div>
             <div className="restock-body">
               <p className="restock-item-name">{restockItem.name}</p>
-              <p className="restock-current">Current stock: <strong>{restockItem.quantity}</strong></p>
-              <label>Add quantity<input type="number" min="1" placeholder="e.g. 24" value={restockQty} onChange={(e) => setRestockQty(e.target.value)} autoFocus /></label>
-              <label>Notes (optional)<input type="text" placeholder="e.g. Invoice #1042" value={restockNotes} onChange={(e) => setRestockNotes(e.target.value)} /></label>
+              <p className="restock-current">
+                Current stock: <strong>{restockItem.quantity}</strong>
+              </p>
+              <label>
+                Add quantity
+                <input
+                  type="number"
+                  min="1"
+                  placeholder="e.g. 24"
+                  value={restockQty}
+                  onChange={(e) => setRestockQty(e.target.value)}
+                  autoFocus
+                />
+              </label>
+              <label>
+                Notes (optional)
+                <input
+                  type="text"
+                  placeholder="e.g. Invoice #1042"
+                  value={restockNotes}
+                  onChange={(e) => setRestockNotes(e.target.value)}
+                />
+              </label>
               {restockQty && !isNaN(Number(restockQty)) && (
-                <p className="restock-preview">New total: <strong>{(restockItem.quantity || 0) + Number(restockQty)}</strong></p>
+                <p className="restock-preview">
+                  New total: <strong>{(restockItem.quantity || 0) + Number(restockQty)}</strong>
+                </p>
               )}
               <div className="modal-actions">
-                <button className="btn btn-secondary" onClick={() => setShowRestockModal(false)}>Cancel</button>
-                <button className="btn btn-primary" onClick={handleRestock} disabled={restockLoading || !restockQty}>{restockLoading ? "Saving…" : "Add Stock"}</button>
+                <button className="btn btn-secondary" onClick={() => setShowRestockModal(false)}>
+                  Cancel
+                </button>
+                <button
+                  className="btn btn-primary"
+                  onClick={handleRestock}
+                  disabled={restockLoading || !restockQty}
+                >
+                  {restockLoading ? "Saving…" : "Add Stock"}
+                </button>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Checkpoint Modal */}
       {showCheckpointModal && (
         <div className="modal-overlay" onClick={() => setShowCheckpointModal(false)}>
           <div className="modal-box modal-sm" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Save Checkpoint</h2>
-              <button className="modal-close" onClick={() => setShowCheckpointModal(false)}>✕</button>
+              <button className="modal-close" onClick={() => setShowCheckpointModal(false)}>
+                ✕
+              </button>
             </div>
             <div className="restock-body">
               <p>Saves a snapshot of all current stock as a new baseline.</p>
-              <label>Notes (optional)<input type="text" placeholder="e.g. Start of Fall 2025" value={checkpointNotes} onChange={(e) => setCheckpointNotes(e.target.value)} /></label>
+              <label>
+                Notes (optional)
+                <input
+                  type="text"
+                  placeholder="e.g. Start of Fall 2025"
+                  value={checkpointNotes}
+                  onChange={(e) => setCheckpointNotes(e.target.value)}
+                />
+              </label>
               <div className="modal-actions">
-                <button className="btn btn-secondary" onClick={() => setShowCheckpointModal(false)}>Cancel</button>
-                <button className="btn btn-primary" onClick={handleCheckpoint} disabled={checkpointLoading}>{checkpointLoading ? "Saving…" : "Save Checkpoint"}</button>
+                <button className="btn btn-secondary" onClick={() => setShowCheckpointModal(false)}>
+                  Cancel
+                </button>
+                <button
+                  className="btn btn-primary"
+                  onClick={handleCheckpoint}
+                  disabled={checkpointLoading}
+                >
+                  {checkpointLoading ? "Saving…" : "Save Checkpoint"}
+                </button>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Export CSV Modal */}
       {showExportModal && (
         <div className="modal-overlay" onClick={() => setShowExportModal(false)}>
           <div className="modal-box modal-sm" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Export CSV</h2>
-              <button className="modal-close" onClick={() => setShowExportModal(false)}>✕</button>
+              <button className="modal-close" onClick={() => setShowExportModal(false)}>
+                ✕
+              </button>
             </div>
             <div className="restock-body">
               <p>Filter by date added. Leave blank to export all currently visible items.</p>
-              <label>From date
-                <input type="date" value={exportDateFrom} onChange={(e) => setExportDateFrom(e.target.value)} />
+              <label>
+                From date
+                <input
+                  type="date"
+                  value={exportDateFrom}
+                  onChange={(e) => setExportDateFrom(e.target.value)}
+                />
               </label>
-              <label>To date
-                <input type="date" value={exportDateTo} onChange={(e) => setExportDateTo(e.target.value)} />
+              <label>
+                To date
+                <input
+                  type="date"
+                  value={exportDateTo}
+                  onChange={(e) => setExportDateTo(e.target.value)}
+                />
               </label>
               <div className="modal-actions">
-                <button className="btn btn-secondary" onClick={() => setShowExportModal(false)}>Cancel</button>
-                <button className="btn btn-primary" onClick={exportCSV}>Download CSV</button>
+                <button className="btn btn-secondary" onClick={() => setShowExportModal(false)}>
+                  Cancel
+                </button>
+                <button className="btn btn-primary" onClick={exportCSV}>
+                  Download CSV
+                </button>
               </div>
             </div>
           </div>
